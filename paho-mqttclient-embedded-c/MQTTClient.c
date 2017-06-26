@@ -222,10 +222,11 @@ int keepalive(MQTTClient* c)
     {
         if (!c->ping_outstanding)
         {
+            int len;
             Timer timer;
             TimerInit(&timer);
             TimerCountdownMS(&timer, 1000);
-            int len = MQTTSerialize_pingreq(c->buf, c->buf_size);
+            len = MQTTSerialize_pingreq(c->buf, c->buf_size);
             if (len > 0 && (rc = sendPacket(c, len, &timer)) == SUCCESS) // send the ping packet
                 c->ping_outstanding = 1;
         }
@@ -251,6 +252,7 @@ int cycle(MQTTClient* c, Timer* timer)
         case CONNACK:
         case PUBACK:
         case SUBACK:
+            LOTRACE_DBG1("cycle: xxxACK packet_type=%d x%x", packet_type, packet_type);
             break;
         case PUBLISH:
         {
@@ -295,6 +297,7 @@ int cycle(MQTTClient* c, Timer* timer)
             break;
         case PINGRESP:
             c->ping_outstanding = 0;
+            LOTRACE_DBG1("cycle: PINGRESP packet_type=%d x%x", packet_type, packet_type);
             break;
     }
     keepalive(c);
@@ -481,10 +484,10 @@ exit:
 int MQTTUnsubscribe(MQTTClient* c, const char* topicFilter)
 {   
     int rc = FAILURE;
+    int len = 0;
     Timer timer;    
     MQTTString topic = MQTTString_initializer;
     topic.cstring = (char *)topicFilter;
-    int len = 0;
 
 #if defined(MQTT_TASK)
 	MutexLock(&c->mutex);
@@ -520,10 +523,10 @@ exit:
 int MQTTPublish(MQTTClient* c, const char* topicName, MQTTMessage* message)
 {
     int rc = FAILURE;
+    int len = 0;
     Timer timer;   
     MQTTString topic = MQTTString_initializer;
     topic.cstring = (char *)topicName;
-    int len = 0;
 
 #if defined(MQTT_TASK)
 	MutexLock(&c->mutex);

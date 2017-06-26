@@ -42,6 +42,7 @@
 #ifdef MQTT_PACKET_HEADER_FILE
 #include MQTT_PACKET_HEADER_FILE
 #else
+// --- Modified by OAB
 #include "MQTTPacket.h"
 #endif
 #include "stdio.h"

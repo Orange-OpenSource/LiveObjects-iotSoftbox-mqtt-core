@@ -25,6 +25,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "liveobjects-client/LiveObjectsClient_Config.h"
+
 #include "liveobjects-sys/LiveObjectsClient_Platform.h"
 #include "platform_default.h"
 
@@ -459,6 +461,8 @@ LiveObjectsD_ResourceRespCode_t LO_msg_decode_rsc_req(const char* payload_data, 
 	for (idx = 0; idx < (token_cnt - 1); idx++) {
 		if ((tokens[idx].type == JSMN_STRING) && (tokens[idx].size == 1) && (2 == (tokens[idx].end - tokens[idx].start))
 				&& (!strncmp("id", payload_data + tokens[idx].start, 2))) {
+			int jw;
+			const LiveObjectsD_Resource_t* rsc_ptr;
 
 			LOTRACE_DBG1("TK[%d]: Found JSON TAG %.*s", idx, tokens[idx].end - tokens[idx].start,
 					payload_data + tokens[idx].start);
@@ -471,8 +475,7 @@ LiveObjectsD_ResourceRespCode_t LO_msg_decode_rsc_req(const char* payload_data, 
 				return RSC_RSP_ERR_INTERNAL_ERROR;
 			}
 			// found
-			int jw;
-			const LiveObjectsD_Resource_t* rsc_ptr = pSetRsc->rsc_ptr;
+			rsc_ptr = pSetRsc->rsc_ptr;
 			len = tokens[idx].end - tokens[idx].start;
 			for (jw = 0; jw < pSetRsc->rsc_nb; jw++, rsc_ptr++) {
 				if ((len == (int) strlen(rsc_ptr->rsc_name))
@@ -502,7 +505,7 @@ LiveObjectsD_ResourceRespCode_t LO_msg_decode_rsc_req(const char* payload_data, 
 	while ((size > 0) && (token_cnt > 0)) {
 		int8_t val_type;
 		char* val_ptr;
-		uint32_t val_len;
+		int32_t val_len;
 		int len = tokens[idx].end - tokens[idx].start;
 		if ((tokens[idx].type != JSMN_STRING) || (tokens[idx].size != 1)) {
 			// error;
@@ -513,12 +516,13 @@ LiveObjectsD_ResourceRespCode_t LO_msg_decode_rsc_req(const char* payload_data, 
 		size--;
 
 		if ((len == 1) && !strncmp("m", payload_data + tokens[idx].start, len)) {
+			int ms;
 			if ((tokens[idx + 1].type != JSMN_OBJECT) || (tokens[idx + 1].size < 3)) {
 				LOTRACE_ERR("TK[%d] METADATA - unexpected token after \"m\" - type=%d size=%d", idx + 1,
 						tokens[idx + 1].type, tokens[idx + 1].size);
 				return RSC_RSP_ERR_INTERNAL_ERROR;
 			}
-			int ms = tokens[idx + 1].size;
+			ms = tokens[idx + 1].size;
 			LOTRACE_DBG1("TK[%d] --- METADATA - %d elements ...", idx, ms);
 
 			idx += 2;
@@ -544,7 +548,7 @@ LiveObjectsD_ResourceRespCode_t LO_msg_decode_rsc_req(const char* payload_data, 
 				}
 				else if ((len == 3) && !strncmp("md5", payload_data + tokens[idx].start, len)) {
 					val_type = 4;
-					val_ptr = pRscUpd->ursc_md5;
+					val_ptr = (char*)pRscUpd->ursc_md5;
 					val_len = sizeof(pRscUpd->ursc_md5);
 				}
 				else {
@@ -681,10 +685,15 @@ LiveObjectsD_ResourceRespCode_t LO_msg_decode_rsc_req(const char* payload_data, 
 #if LOC_FEATURE_LO_PARAMS
 int LO_msg_decode_params_req(const char* payload_data, uint32_t payload_len, const LOMSetOfParams_t* pSetCfg,
 		LOMSetofUpdatedParams_t* pSetCfgUpdate) {
+#ifndef LOC_MAX_OF_PARSED_PARAMS
+#warning "LOC_MAX_OF_PARSED_PARAMS not defined -> set to 5"
+#define LOC_MAX_OF_PARSED_PARAMS   5
+#endif
+#define NB_TK_FOR_PARMS    (5+6*LOC_MAX_OF_PARSED_PARAMS+1)  //  6 tokens by parameter
 	int ret;
 	int token_cnt;
 	jsmn_parser parser;
-	jsmntok_t tokens[25];
+	jsmntok_t tokens[NB_TK_FOR_PARMS];
 	int idx;
 	int size;
 	const char* pc;
@@ -701,12 +710,13 @@ int LO_msg_decode_params_req(const char* payload_data, uint32_t payload_len, con
 
 	memset(&tokens, 0, sizeof(tokens));
 	jsmn_init(&parser);
-	token_cnt = jsmn_parse(&parser, payload_data, payload_len, tokens, 25);
+	token_cnt = jsmn_parse(&parser, payload_data, payload_len, tokens, NB_TK_FOR_PARMS);
 	if (token_cnt < 0) {
-		LOTRACE_ERR("ERROR %d returned by jsmn_parse", token_cnt);
+		LOTRACE_ERR("ERROR %d returned by jsmn_parse (max params=%u)", token_cnt, LOC_MAX_OF_PARSED_PARAMS);
 		LOTRACE_ERR("'%s'", payload_data);
 		return -1;
 	}
+#undef NB_TK_FOR_PARMS
 	if (token_cnt == 0) {
 		LOTRACE_ERR("EMPTY !!");
 		return 0;
@@ -786,7 +796,7 @@ int LO_msg_decode_params_req(const char* payload_data, uint32_t payload_len, con
 
 #if (MSG_DBG > 1)
 		if (len > 0) {
-			printf("   *** param name = %.*s\r\n", len, pc);
+			LOTRACE_PRINTF("   *** param name = %.*s\r\n", len, pc);
 		}
 #endif
 
@@ -814,12 +824,12 @@ int LO_msg_decode_params_req(const char* payload_data, uint32_t payload_len, con
 					}
 					else {
 #if (MSG_DBG > 1)
-						printf("   *** param value = %.*s\r\n", tokens[idx + 5].end - tokens[idx + 5].start,
+						LOTRACE_PRINTF("   *** param value = %.*s\r\n", tokens[idx + 5].end - tokens[idx + 5].start,
 								payload_data + tokens[idx + 5].start);
 #endif
 						ret = updateCnfParam(payload_data, &tokens[idx + 5], param_ptr, pSetCfg->param_callback);
 
-						if (pSetCfgUpdate->nb_of_params < LOC_MAX_OF_COMMAND_ARGS) {
+						if (pSetCfgUpdate->nb_of_params < LOC_MAX_OF_PARSED_PARAMS) {
 							pSetCfgUpdate->tab_of_param_ptr[pSetCfgUpdate->nb_of_params++] = param_ptr;
 						}
 					}

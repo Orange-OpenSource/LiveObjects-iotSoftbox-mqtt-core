@@ -13,6 +13,12 @@
 
 #include "config/liveobjects_dev_params.h"
 
+#if SECURITY_ENABLED
+// If security is enabled to establish connection to the LiveObjects platform,
+// include certificates file
+#include "config/liveobjects_dev_security.h"
+#endif
+
 #include "paho-mqttclient-embedded-c/MQTTClient.h"
 
 #include <stdio.h>
@@ -69,12 +75,12 @@
 
 /* Version of MQTT to be used : 4 = 3.1.1  (3 is for  3.1) */
 #define MQTTPacket_connectData_initializer { \
-    {'M', 'Q', 'T', 'C'}, \
-    0, 4, {NULL, {0, NULL}}, \
-    60, 1, 0, \
-    MQTTPacket_willOptions_initializer, \
-    {NULL, {0, NULL}}, {NULL, {0, NULL}} \
-    }
+	{'M', 'Q', 'T', 'C'}, \
+	0, 4, {NULL, {0, NULL}}, \
+	60, 1, 0, \
+	MQTTPacket_willOptions_initializer, \
+	{NULL, {0, NULL}}, {NULL, {0, NULL}} \
+	}
 
 #define MTYPE_PUB_USR_MSG        0x11
 
@@ -85,7 +91,7 @@
 
 #define MTYPE_PUB_CMD_RSP        0x27
 
-#define BYTE_PRINTED_SIZE 3
+#define BYTE_PRINTED_SIZE        3
 
 /* --------------------------------------------------------------------------------- */
 /* Type definitions
@@ -128,7 +134,7 @@ static struct {
 
 #if SECURITY_ENABLED
 
-static LiveObjectsSecurityParams_t _LOClient_params_security = { 
+static LiveObjectsSecurityParams_t _LOClient_params_security = {
 		{ 0, SERVER_CERT },
 		{ 0, CLIENT_CERT },
 		{ 0, CLIENT_PKEY },
@@ -169,7 +175,7 @@ static void LOCC_ntfDevRscUpd(MessageData* msg);
 #define TOPIC_COMMAND  1
 #define TOPIC_RSC_UPD  2
 
-LOMTopicSub_t _LOClient_TopicSub[3] = { 
+LOMTopicSub_t _LOClient_TopicSub[3] = {
 		{ 0, "dev/cfg/upd", LOCC_NTFDEVCFGUDP },
 		{ 0, "dev/cmd", LOCC_NTFDEVCMD },
 		{ 0, "dev/rsc/upd", LOCC_NTFDEVRSCUDP }
@@ -207,7 +213,7 @@ static uint16_t _LOClient_dump_mqtt_publish = 0;
 /* --------------------------------------------------------------------------------- */
 /*  */
 static void mqtt_dump_hex(const unsigned char* p_buf, int len) {
-#if 1
+#if 0
 	int i;
 #if defined(LOC_MQT_DUMP_STATIC_BUFFER_SIZE) && (LOC_MQT_DUMP_STATIC_BUFFER_SIZE > 0)
 	static char frame_buffer[LOC_MQT_DUMP_STATIC_BUFFER_SIZE * BYTE_PRINTED_SIZE + 2];
@@ -233,7 +239,6 @@ static void mqtt_dump_hex(const unsigned char* p_buf, int len) {
 /* --------------------------------------------------------------------------------- */
 /*  */
 static void mqtt_dump_msg(const unsigned char* p_buf) {
-	int i;
 	const unsigned char* pc = p_buf;
 	unsigned char digit;
 	MQTTHeader header;
@@ -380,7 +385,7 @@ static void LOCC_mqPurge(void) {
 #if LOC_FEATURE_LO_PARAMS
 static void LOCC_ntfDevCfgUpd(MessageData* msg) {
 	int ret;
-	LOTRACE_INF("topicName='%s' '%.*s'", msg->topicName->cstring, msg->topicName->lenstring.len,
+	LOTRACE_INF("topicName='%s' '%.*s'", (msg->topicName->cstring) ? msg->topicName->cstring : "" , msg->topicName->lenstring.len,
 			msg->topicName->lenstring.data);
 	LOTRACE_INF("msg: id=%d qos=%d '%.*s'", msg->message->id, msg->message->qos, msg->message->payloadlen,
 			(const char*) msg->message->payload);
@@ -441,9 +446,10 @@ static void LOCC_ntfDevCmd(MessageData* msg) {
 	}
 
 	if ((cid) &&(ret)) {
+		const char* pMsg;
 		/* send immediately a command response */
 		LOTRACE_INF("Send command response cid=%"PRIi32" ret= %d", cid, ret);
-		const char* pMsg = LO_msg_encode_cmd_result(cid, ret);
+		pMsg = LO_msg_encode_cmd_result(cid, ret);
 		if (pMsg) {
 			LOCC_MqttPublish(QOS0, "dev/cmd/res", pMsg);
 		}
@@ -547,7 +553,7 @@ static int LOCC_SubscibeTopic(int i) {
 			LOTRACE_WARN("Subscribe[%d] %s  - NO CALLBACK FUNCTION !!", i, _LOClient_TopicSub[i].topicName);
 			return 0;
 		}
-		LOTRACE_NOTICE("Subscribe[%d] %s , granted_qos=%d .... ", i, _LOClient_TopicSub[i].topicName, QOS0);
+		LOTRACE_NOTICE("Subscribe[%d] '%s' , granted_qos=%d .... ", i, _LOClient_TopicSub[i].topicName, QOS0);
 		rc = MQTTSubscribe(&_LOClient_mqtt_ctx, _LOClient_TopicSub[i].topicName, QOS0, _LOClient_TopicSub[i].callback);
 		if ((rc < 0) || (rc == 0x80)) {
 			LOTRACE_ERR("Subscribe[%d] %s failed, rc=%d", i, _LOClient_TopicSub[i].topicName, rc);
@@ -597,16 +603,26 @@ static int LOCC_processStatus(uint8_t force) {
 	for (status_hdl = 0; status_hdl < LOC_MAX_OF_STATUS_SET; status_hdl++) {
 		LOMSetOfStatus_t* p_satusSet = &_LOClient_Set_Status[status_hdl];
 		if ((p_satusSet->data_set.data_ptr) && (p_satusSet->data_set.data_nb)
-				&& ((force) || (p_satusSet->pushtoLOServer))) {
+				&& ((force)
+#if LOM_PUSH_FLAG
+						|| (p_satusSet->pushtoLOServer)
+#endif
+						)) {
 			const char* pMsg;
+#if LOM_PUSH_FLAG
 			LOTRACE_INF("force=%d  push=%d => PUBLISH STATUS ...", force,
 					p_satusSet->pushtoLOServer);
 			p_satusSet->pushtoLOServer = 1;
+#else
+			LOTRACE_INF("force=%d  => PUBLISH STATUS ...", force);
+#endif
 			pMsg = LO_msg_encode_status(0, &p_satusSet->data_set);
 			if (pMsg) {
 				rc = LOCC_MqttPublish(QOS0, "dev/info", pMsg);
 				if (rc == 0) {
+#if LOM_PUSH_FLAG
 					p_satusSet->pushtoLOServer = 0;
+#endif
 				}
 			}
 		}
@@ -621,7 +637,8 @@ static int LOCC_processStatus(uint8_t force) {
 
 static int LOCC_processResources(uint8_t force) {
 	int rc = 0;
-	if ((_LOClient_Set_Rsc.rsc_ptr) && ((force) || (_LOClient_Set_Rsc.pushtoLOServer))) {
+	if ((_LOClient_Set_Rsc.rsc_ptr) &&
+			((force) || (_LOClient_Set_Rsc.pushtoLOServer))) {
 		const char* pMsg;
 		LOTRACE_INF("force=%d  push=%d => PUBLISH RESOURCES ...", force,
 				_LOClient_Set_Rsc.pushtoLOServer);
@@ -688,7 +705,10 @@ static int LOCC_processGetRsc(void) {
 							break;
 						}
 					}
-
+#if !LOC_FEATURE_MBEDTLS
+					LOTRACE_WARN("MD5 WARNING: Not implemented => Force OK");
+					i = sizeof(output);
+#endif
 					if (_LOClient_Set_Rsc.rsc_cb_ntfy) {
 						_LOClient_Set_Rsc.rsc_cb_ntfy((i == sizeof(output)) ? 1 : 2,
 								_LOClient_Set_UpdatedRsc.ursc_obj_ptr, _LOClient_Set_UpdatedRsc.ursc_vers_old,
@@ -797,14 +817,22 @@ static int LOCC_processConfig(void) {
 			}
 		}
 
-		if ((_LOClient_cfg_first) || (_LOClient_Set_Params.pushtoLOServer)) {
+		if ((_LOClient_cfg_first)
+#if LOM_PUSH_FLAG
+				|| (_LOClient_Set_Params.pushtoLOServer)
+#endif
+				) {
+#if LOM_PUSH_FLAG
 			LOTRACE_INF("first=%d  push=%d => PUBLISH CFG parameters ...", _LOClient_cfg_first,
 					_LOClient_Set_Params.pushtoLOServer);
+#endif
 			pMsg = LO_msg_encode_params_all(0, &_LOClient_Set_Params.param_set, 0);
 			if (pMsg) {
 				rc = LOCC_MqttPublish(QOS0, "dev/cfg", pMsg);
 				if (rc == 0) {
+#if LOM_PUSH_FLAG
 					_LOClient_Set_Params.pushtoLOServer = 0;
+#endif
 					if (_LOClient_cfg_first) {
 #if 1
 						rc = LOCC_SubscibeTopic(TOPIC_CFG_UPD);
@@ -913,7 +941,7 @@ static int LOCC_setStreamId(uint8_t stream_prefix, LOMSetOfData_t* p_dataSet, co
 			p_dataSet->stream_id[len] = 0;
 	}
 	else {
-		int len = strlen(stream_id);
+		size_t len = strlen(stream_id);
 		memset(p_dataSet->stream_id, 0, sizeof(p_dataSet->stream_id));
 		memcpy(p_dataSet->stream_id, stream_id,
 				len < sizeof(p_dataSet->stream_id) ? len : sizeof(p_dataSet->stream_id));
@@ -1010,6 +1038,7 @@ static void LOCC_connectOK(void) {
 		LOTRACE_DBG1("Subcribe TOPIC_RSC_UPD, ret=%d", ret);
 	}
 #endif
+	(void)ret;
 }
 
 /* ================================================================================= */
@@ -1043,7 +1072,7 @@ int LiveObjectsClient_CheckApiKey(const char* apikey) {
 	if ((apikey) &&(*apikey)) {
 		unsigned int i;
 		for (i = 0; i < strlen(apikey); i++) {
-			if (0 == (((apikey[i] >= '0') && (apikey[i] <= '9')) 
+			if (0 == (((apikey[i] >= '0') && (apikey[i] <= '9'))
 							|| ((apikey[i] >= 'a') && (apikey[i] <= 'f'))
 							|| ((apikey[i] >= 'A') && (apikey[i] <= 'F')))) {
 				return -1;
@@ -1094,8 +1123,9 @@ int LiveObjectsClient_Init(void* net_iface_handler) {
 	}
 
 	MQTTClientInit(&_LOClient_mqtt_ctx, &_LOClient_MQTTClient_network,
-	LOC_MQTT_DEF_COMMAND_TIMEOUT, _LOClient_mqtt_buffer_snd, LOC_MQTT_DEF_SND_SZ, _LOClient_mqtt_buffer_rcv,
-	LOC_MQTT_DEF_RCV_SZ);
+			LOC_MQTT_DEF_COMMAND_TIMEOUT,
+			_LOClient_mqtt_buffer_snd, LOC_MQTT_DEF_SND_SZ,
+			_LOClient_mqtt_buffer_rcv, LOC_MQTT_DEF_RCV_SZ);
 
 #if SECURITY_ENABLED && ((LOC_SERV_PORT  == 1884) || (LOC_SERV_PORT  == 8883))
 	rc = LOCC_EnableTLS();
@@ -1113,7 +1143,7 @@ int LiveObjectsClient_Init(void* net_iface_handler) {
 /*  */
 int LiveObjectsClient_SetDevId(const char* dev_id) {
 	if ((dev_id) &&(*dev_id)) {
-		int len = strlen(dev_id);
+		size_t len = strlen(dev_id);
 		memset(_LOClient_dev_id, 0, sizeof(_LOClient_dev_id));
 		memcpy(_LOClient_dev_id, dev_id, len < sizeof(_LOClient_dev_id) ? len : sizeof(_LOClient_dev_id));
 		_LOClient_dev_id[sizeof(_LOClient_dev_id) - 1] = 0;
@@ -1131,7 +1161,7 @@ int LiveObjectsClient_SetDevId(const char* dev_id) {
 /*  */
 int LiveObjectsClient_SetNameSpace(const char* name_space) {
 	if ((name_space) &&(*name_space)) {
-		int len = strlen(name_space);
+		size_t len = strlen(name_space);
 		memset(_LOClient_dev_name_space, 0, sizeof(_LOClient_dev_id));
 		memcpy(_LOClient_dev_name_space, name_space,
 				len < sizeof(_LOClient_dev_name_space) ? len : sizeof(_LOClient_dev_name_space));
@@ -1203,11 +1233,12 @@ int LiveObjectsClient_AttachCfgParams(const LiveObjectsD_Param_t* param_ptr, int
 /* --------------------------------------------------------------------------------- */
 /*  */
 int LiveObjectsClient_AttachStatus(const LiveObjectsD_Data_t* data_ptr, int32_t data_nb) {
+
+#if LOC_FEATURE_LO_STATUS  && (LOC_MAX_OF_DATA_SET > 0)
+	int status_hdl;
 	if ((data_ptr == NULL) || (data_nb == 0)) {
 		return -1;
 	}
-#if LOC_FEATURE_LO_STATUS  && (LOC_MAX_OF_DATA_SET > 0)
-	int status_hdl;
 	for (status_hdl = 0; status_hdl < LOC_MAX_OF_STATUS_SET; status_hdl++) {
 		if (_LOClient_Set_Status[status_hdl].data_set.data_ptr == NULL) {
 			break;
@@ -1217,7 +1248,9 @@ int LiveObjectsClient_AttachStatus(const LiveObjectsD_Data_t* data_ptr, int32_t 
 	if (status_hdl < LOC_MAX_OF_STATUS_SET) {
 		_LOClient_Set_Status[status_hdl].data_set.data_ptr = data_ptr;
 		_LOClient_Set_Status[status_hdl].data_set.data_nb = data_nb;
+#if LOM_PUSH_FLAG
 		_LOClient_Set_Status[status_hdl].pushtoLOServer = 1;
+#endif
 
 		LOTRACE_INF("nb=%"PRIi32, data_nb);
 		return status_hdl;
@@ -1230,11 +1263,12 @@ int LiveObjectsClient_AttachStatus(const LiveObjectsD_Data_t* data_ptr, int32_t 
 /*  */
 int LiveObjectsClient_AttachData(uint8_t stream_prefix, const char* stream_id, const char* model, const char* tags,
 		const LiveObjectsD_GpsFix_t* gps_ptr, const LiveObjectsD_Data_t* data_ptr, int32_t data_nb) {
+
+#if LOC_FEATURE_LO_DATA && (LOC_MAX_OF_DATA_SET > 0)
+	int data_hdl;
 	if ((stream_id == NULL) || (*stream_id == 0) || (data_ptr == NULL) || (data_nb == 0)) {
 		return -1;
 	}
-#if LOC_FEATURE_LO_DATA && (LOC_MAX_OF_DATA_SET > 0)
-	int data_hdl;
 	for (data_hdl = 0; data_hdl < LOC_MAX_OF_DATA_SET; data_hdl++) {
 		if (_LOClient_Set_Data[data_hdl].stream_id[0] == 0) {
 			break;
@@ -1242,7 +1276,9 @@ int LiveObjectsClient_AttachData(uint8_t stream_prefix, const char* stream_id, c
 	}
 
 	if (data_hdl < LOC_MAX_OF_DATA_SET) {
-		int len;
+#if (LOM_SETOFDATA_MODEL_SZ > 0) || (LOM_SETOFDATA_TAGS_SZ > 0)
+		size_t len;
+#endif
 		LOMSetOfData_t* p_dataSet = &_LOClient_Set_Data[data_hdl];
 
 		int ret = LOCC_setStreamId(stream_prefix, p_dataSet, stream_id);
@@ -1250,7 +1286,6 @@ int LiveObjectsClient_AttachData(uint8_t stream_prefix, const char* stream_id, c
 			return -1;
 		}
 #if (LOM_SETOFDATA_MODEL_SZ > 0)
-		1
 		if ((model) &&(*model)) {
 			len = strlen(model);
 			memset(p_dataSet->model, 0, sizeof(p_dataSet->model));
@@ -1260,6 +1295,8 @@ int LiveObjectsClient_AttachData(uint8_t stream_prefix, const char* stream_id, c
 		else {
 			p_dataSet->model[0] = 0;
 		}
+#else
+		(void) model;
 #endif
 
 #if (LOM_SETOFDATA_TAGS_SZ > 0)
@@ -1272,6 +1309,8 @@ int LiveObjectsClient_AttachData(uint8_t stream_prefix, const char* stream_id, c
 		else {
 			p_dataSet->tags[0] = 0;
 		}
+#else
+		(void) tags;
 #endif
 		p_dataSet->gps_ptr = gps_ptr;
 
@@ -1445,7 +1484,7 @@ int LiveObjectsClient_Yield(int timeout_ms) {
 		}
 
 		if (netw_isLost(&_LOClient_MQTTClient_network)) {
-			LOTRACE_NOTICE("LOST !!", ret);
+			LOTRACE_NOTICE("LOST !!");
 			netw_disconnect(&_LOClient_MQTTClient_network, 0);
 			_LOClient_state_connected = 0;
 			ret = -1;
@@ -1551,6 +1590,7 @@ int LiveObjectsClient_PushData(int data_hdl) {
 #endif
 	}
 #endif
+	LOTRACE_ERR("ERROR while publishing data !");
 	return -1;
 }
 
@@ -1589,15 +1629,17 @@ int LiveObjectsClient_PushCfgParams(void) {
 int LiveObjectsClient_CommandResponse(int32_t cid, const LiveObjectsD_Data_t* data_ptr, int data_nb) {
 #if LOC_FEATURE_LO_COMMANDS
 	if (_LOClient_state_connected) {
+		const char *p_msg ;
 		uint8_t from = LO_sys_threadIsLiveObjectsClient() ? 0 : MTYPE_PUB_CMD_RSP;
 		LOTRACE_INF("from=x%x cid= %"PRIi32" obj_ptr=x%p  obj_nb=%d ...", from, cid,
 				data_ptr, data_nb);
-		const char *p_msg = LO_msg_encode_cmd_resp(from, cid, data_ptr, data_nb);
+		p_msg = LO_msg_encode_cmd_resp(from, cid, data_ptr, data_nb);
 		if (p_msg) {
 			if (from == 0) {
 				/* Publish now because it is LOM Client thread (negative response ...) */
 				return LOCC_MqttPublish(QOS0, "dev/cmd/res", p_msg);
 			}
+#if LOM_MQUEUE
 			/* otherwise put it in the queue */
 			if (LOCC_mqPut(p_msg) == 0) {
 				LOTRACE_INF("msg is put in queue !!");
@@ -1605,9 +1647,12 @@ int LiveObjectsClient_CommandResponse(int32_t cid, const LiveObjectsD_Data_t* da
 			}
 			LOTRACE_ERR("ERROR to put in queue - MEM_FREE %p x%x", p_msg, *p_msg);
 			MEM_FREE(p_msg);
+#else
+			LOTRACE_ERR("ERROR - not supported in this config");
+#endif
 		}
 	}
-#endif
+#endif /* LOC_FEATURE_LO_COMMANDS */
 	return -1;
 }
 
@@ -1671,7 +1716,7 @@ int LiveObjectsClient_Cycle(int timeout_ms) {
 #endif
 
 #if LOC_FEATURE_LO_PARAMS
-	/* Something to publish ?
+	/* Something to publish ?  */
 	/*  -- Config Parameters ? */
 	ret = LOCC_processConfig();
 #endif
@@ -1841,8 +1886,9 @@ void LiveObjectsClient_Run(LiveObjectsD_CallbackState_t callback) {
 /* --------------------------------------------------------------------------------- */
 /*  */
 int LiveObjectsClient_ThreadStart(LiveObjectsD_CallbackState_t callback) {
-	LOTRACE_INF("(x%p) ...", callback);
-	int ret = LO_sys_threadStart((void const *) callback);
+	int ret;
+	LOTRACE_INF("(callback=x%p) ...", callback);
+	ret = LO_sys_threadStart((void const *) callback);
 	if (ret)
 		LOTRACE_ERR("(x%p) ret=%d", callback, ret);
 
