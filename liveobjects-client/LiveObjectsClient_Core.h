@@ -64,7 +64,7 @@ void LiveObjectsClient_InitDbgTrace(lotrace_level_t level);
  *
  * @return 0 if successful, otherwise a negative value when occur occurs.
  */
-int LiveObjectsClient_Init(void* network_itf_handle);
+int LiveObjectsClient_Init(void* network_itf_handle, unsigned long long apikey_p1, unsigned long long apikey_p2);
 
 /**
  * @brief Set Device Identifier.

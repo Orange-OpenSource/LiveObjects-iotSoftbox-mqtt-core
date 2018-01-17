@@ -64,7 +64,7 @@
 #define LOC_SERV_PORT                  1883
 #endif
 #endif
-
+/*
 #ifndef LOC_CLIENT_DEV_ID
 #define LOC_CLIENT_DEV_ID             "LomDev"
 #endif
@@ -72,7 +72,7 @@
 #ifndef LOC_CLIENT_DEV_NAME_SPACE
 #define LOC_CLIENT_DEV_NAME_SPACE     "LomSK"
 #endif
-
+*/
 /* Version of MQTT to be used : 4 = 3.1.1  (3 is for  3.1) */
 #define MQTTPacket_connectData_initializer { \
 	{'M', 'Q', 'T', 'C'}, \
@@ -111,8 +111,11 @@ typedef struct {
  * ---------------
  */
 
-static char _LOClient_dev_id[LOC_MQTT_DEF_DEV_ID_SZ] = LOC_CLIENT_DEV_ID;
-static char _LOClient_dev_name_space[LOC_MQTT_DEF_NAME_SPACE_SZ] = LOC_CLIENT_DEV_NAME_SPACE;
+static char _LOClient_dev_id[LOC_MQTT_DEF_DEV_ID_SZ] = "";
+static char _LOClient_dev_name_space[LOC_MQTT_DEF_NAME_SPACE_SZ] = "";
+
+static unsigned long long apikey_p1 = 0;
+static unsigned long long apikey_p2 = 0;
 
 static Network _LOClient_MQTTClient_network;
 
@@ -214,7 +217,7 @@ static uint16_t _LOClient_dump_mqtt_publish = 0;
 
 static int apikeyconv(char * apikey, int size) {
 	if (size == APIKEY_LENGTH) {
-		snprintf(apikey, size, "%016llx%016llx", (unsigned long long)C_LOC_CLIENT_DEV_API_KEY_P1, (unsigned long long)C_LOC_CLIENT_DEV_API_KEY_P2);
+		snprintf(apikey, size, "%016llx%016llx", apikey_p1, apikey_p2);
 		return 0;
 	}
 	return -1;
@@ -484,7 +487,7 @@ static int LOCC_EnableTLS(void) {
 
 /* --------------------------------------------------------------------------------- */
 /*  */
-static int LOCC_MqttConnect(void) {
+static int LOCC_MqttConnect() {
 	int ret;
 	char mqtt_client_id[14+LOC_MQTT_DEF_NAME_SPACE_SZ+LOC_MQTT_DEF_DEV_ID_SZ+2];
 
@@ -1102,9 +1105,12 @@ int LiveObjectsClient_CheckApiKey(const char* apikey) {
 
 /* --------------------------------------------------------------------------------- */
 /*  */
-int LiveObjectsClient_Init(void* net_iface_handler) {
+int LiveObjectsClient_Init(void* net_iface_handler, unsigned long long apikey_p1_, unsigned long long apikey_p2_) {
 	int rc;
 	char tmpApikey[APIKEY_LENGTH];
+
+	apikey_p1 = apikey_p1_;
+	apikey_p2 = apikey_p2_;
 
 	rc = apikeyconv(tmpApikey, APIKEY_LENGTH);
 
