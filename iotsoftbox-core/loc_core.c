@@ -50,7 +50,7 @@
 #define LOC_MQTT_USER_NAME            "json+device"
 
 #ifndef LOC_SERV_HOST_NAME
-#define LOC_SERV_HOST_NAME           "liveobjects.orange-business.com"
+#define LOC_SERV_HOST_NAME           "mqtt.liveobjects.orange-business.com"
 #endif
 
 #ifndef LOC_SERV_IP_ADDRESS
@@ -140,7 +140,7 @@ static struct {
 #if SECURITY_ENABLED
 
 static LiveObjectsSecurityParams_t _LOClient_params_security = {
-		{ 0, SERVER_CERT },
+		{ 1, SERVER_CERTS },
 		{ 0, CLIENT_CERT },
 		{ 0, CLIENT_PKEY },
 		SERVER_CERTIFICATE_COMMON_NAME,
