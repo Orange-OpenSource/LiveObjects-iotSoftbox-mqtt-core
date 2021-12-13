@@ -50,7 +50,7 @@
 #define LOC_MQTT_USER_NAME            "json+device"
 
 #ifndef LOC_SERV_HOST_NAME
-#define LOC_SERV_HOST_NAME           "liveobjects.orange-business.com"
+#define LOC_SERV_HOST_NAME           "mqtt.liveobjects.orange-business.com"
 #endif
 
 #ifndef LOC_SERV_IP_ADDRESS
