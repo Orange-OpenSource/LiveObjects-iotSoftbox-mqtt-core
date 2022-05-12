@@ -38,6 +38,8 @@ int netw_connect(Network *pNetwork, LiveObjectsNetConnectParams_t* params);
 
 void netw_disconnect(Network *pNetwork, int cause);
 
+int get_mac(char* iface, char* buf);
+
 #if defined(__cplusplus)
 }
 #endif
