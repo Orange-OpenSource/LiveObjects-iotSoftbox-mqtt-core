@@ -14,6 +14,10 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+
 #include "netw_wrapper.h"
 #include "netw_sock.h"
 
@@ -709,4 +713,35 @@ int netw_tls_destroy(Network *pNetwork) {
 	mbedtls_entropy_free(&_netw_entropy);
 #endif /* LOC_FEATURE_MBEDTLS */
 	return 0;
+}
+
+/* --------------------------------------------------------------------------------- */
+/*  */
+
+int get_mac(char* iface, char* buf)
+{
+    int fd;
+	int ret;
+    struct ifreq ifr;
+    unsigned char *mac = NULL;
+
+    memset(&ifr, 0, sizeof(ifr));
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    ifr.ifr_addr.sa_family = AF_INET;
+    strncpy(ifr.ifr_name , iface , IFNAMSIZ-1);
+
+    if (0 == ioctl(fd, SIOCGIFHWADDR, &ifr)) {
+        mac = (unsigned char *)ifr.ifr_hwaddr.sa_data;
+        sprintf(buf, "%.2X%.2X%.2X%.2X%.2X%.2X" , mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		ret = 0;
+    }
+	else {
+        sprintf(buf, "%s", "");
+        ret = -1;		
+	}
+
+    close(fd);
+	return ret;
 }
